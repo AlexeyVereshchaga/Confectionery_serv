@@ -1,5 +1,7 @@
 import auth.configureAuth
 import database.DatabaseFactory
+import dto.InstantIso8601Serializer
+import dto.UUIDSerializer
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -14,9 +16,19 @@ import routes.authRoutes
 import routes.chatRoutes
 import routes.productRoutes
 import java.util.*
+import io.ktor.server.application.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.http.*
+import io.ktor.server.response.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import java.time.Instant
 
 
-fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
+fun main() {
+    embeddedServer(Netty, port = 8080, module = Application::module)
+        .start(wait = true)
+}
 
 data class AdminSession(val adminId: UUID)
 
@@ -30,10 +42,17 @@ fun Application.module() {
 
     install(CallLogging)
     install(ContentNegotiation) {
-        json()
+        json(Json {
+            serializersModule = SerializersModule {
+                contextual(UUID::class, UUIDSerializer)
+                contextual(Instant::class, InstantIso8601Serializer)
+            }
+            encodeDefaults = true
+            ignoreUnknownKeys = true
+        })
     }
     install(Authentication)
-
+    configureStatusPages()
     DatabaseFactory.init()
 
     configureAuth()
@@ -46,8 +65,23 @@ fun Application.configureRoutes() {
         productRoutes()
         chatRoutes()
         adminHtmlRoutes()
-        // TODO: adminHtmlRoutes() и т.д.
     }
 }
+
+fun Application.configureStatusPages() {
+    install(StatusPages) {
+        status(HttpStatusCode.NotFound) { statusCode ->
+            call.respondText("Страница не найдена", status = statusCode)
+        }
+        status(HttpStatusCode.Unauthorized) { statusCode ->
+            call.respondText("Доступ запрещён", status = statusCode)
+        }
+        exception<Throwable> { call, cause ->
+            cause.printStackTrace()
+            call.respondText("Ошибка сервера: ${cause.message}", status = HttpStatusCode.InternalServerError)
+        }
+    }
+}
+
 
 

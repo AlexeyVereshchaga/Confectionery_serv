@@ -25,6 +25,7 @@ dependencies {
     implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
     implementation("io.ktor:ktor-server-call-logging:2.3.7")
+    implementation("io.ktor:ktor-server-status-pages:2.3.7")
 
     // Exposed ORM
     implementation("org.jetbrains.exposed:exposed-core:0.45.0")
