@@ -1,10 +1,13 @@
 package routes
 
 import AdminSession
+import UserSession
 import auth.PasswordHasher
+import auth.TokenService
 import auth.requireAdminSession
 import dto.AdminChatListItem
 import dto.AdminChatMessageItem
+import dto.toProductDto
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -21,7 +24,6 @@ import models.Users
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.Clock
 import java.util.*
 
 fun Route.adminHtmlRoutes() {
@@ -49,30 +51,37 @@ fun Route.adminHtmlRoutes() {
             }
         }
 
-        // Login processing
         post("/login") {
             val params = call.receiveParameters()
             val email = params["email"].orEmpty()
             val password = params["password"].orEmpty()
 
-            val admin = transaction {
-                Users.select {
-                    Users.email eq email and (Users.isAdmin eq true)
-                }.singleOrNull()
+            val user = transaction {
+                Users.select { Users.email eq email }.singleOrNull()
             }
 
-            if (admin != null && PasswordHasher.verify(password, admin[Users.passwordHash])) {
-                call.sessions.set(AdminSession(admin[Users.id]))
-                call.respondRedirect("/admin/products")
-            } else {
-                call.respondHtml {
-                    body {
-                        p { +"Invalid credentials" }
-                        a(href = "/admin/login") { +"Try again" }
-                    }
+            if (user != null && PasswordHasher.verify(password, user[Users.passwordHash])) {
+                if (user[Users.isAdmin]) {
+                    // ✅ Админ логинится по старому (сессия + редирект)
+                    call.sessions.set(AdminSession(user[Users.id]))
+                    call.respondRedirect("/admin/products")
+                } else {
+                    // ✅ Пользователь получает access/refresh токены
+                    val userId = user[Users.id]
+                    val (access, refresh) = TokenService.generateTokensForUser(userId)
+
+                    call.respond(
+                        TokenResponse(
+                            accessToken = access,
+                            refreshToken = refresh
+                        )
+                    )
                 }
+            } else {
+                call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
             }
         }
+
 
         // Logout
         get("/logout") {
@@ -80,7 +89,8 @@ fun Route.adminHtmlRoutes() {
             call.respondRedirect("/admin/login")
         }
 
-        get("/products") {
+// ==== ADMIN PRODUCTS (как у тебя было) ====
+        get("/admin/products") {
             val adminId = call.requireAdminSession() ?: return@get
 
             val products = transaction {
@@ -118,6 +128,23 @@ fun Route.adminHtmlRoutes() {
                 }
             }
         }
+
+// ==== USER PRODUCTS ====
+        get("/products") {
+            val session = call.sessions.get<UserSession>()
+            if (session == null) {
+                call.respondRedirect("/login")
+                return@get
+            }
+
+            val products = transaction {
+                Products.selectAll().map {
+                    it.toProductDto()
+                }
+            }
+
+            call.respond(products) // JSON
+        }
 //форма создания товара
         get("/products/new") {
             val adminId = call.requireAdminSession() ?: return@get
@@ -128,7 +155,9 @@ fun Route.adminHtmlRoutes() {
                     h2 { +"Create Product" }
                     form(action = "/admin/products/new", method = FormMethod.post, encType = FormEncType.multipartFormData) {
                         p { textInput(name = "name") { placeholder = "Name" } }
-                        p { textArea(rows = "5", cols = "40") { +"Description" } }
+                        p { textArea(rows = "5", cols = "40", ) {
+                            attributes["name"] = "description"
+                            +"Description" } }
                         p { textInput(name = "price") { placeholder = "Price" } }
                         p { fileInput(name = "image") }
                         p { submitInput { value = "Create" } }
@@ -198,6 +227,7 @@ fun Route.adminHtmlRoutes() {
                         p { textInput(name = "name") { value = product[Products.name] } }
                         p {
                             textArea(rows = "5", cols = "40") {
+                                attributes["name"] = "description"
                                 +product[Products.description]
                             }
                         }

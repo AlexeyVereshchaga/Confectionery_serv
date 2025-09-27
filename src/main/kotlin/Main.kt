@@ -32,12 +32,15 @@ fun main() {
 
 data class AdminSession(val adminId: UUID)
 
+data class UserSession(val userId: UUID)
+
 fun Application.module() {
     install(Sessions) {
         cookie<AdminSession>("admin_session") {
             cookie.path = "/"
             cookie.httpOnly = true
         }
+        cookie<UserSession>("user_session")
     }
 
     install(CallLogging)
