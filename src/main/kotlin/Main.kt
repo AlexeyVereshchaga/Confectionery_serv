@@ -51,7 +51,7 @@ fun Application.module() {
             ignoreUnknownKeys = true
         })
     }
-    install(Authentication)
+
     configureStatusPages()
     DatabaseFactory.init()
 
@@ -61,6 +61,9 @@ fun Application.module() {
 
 fun Application.configureRoutes() {
     routing {
+        get("/") {
+            call.respondText("Сервер работает!", ContentType.Text.Plain)
+        }
         authRoutes()
         productRoutes()
         chatRoutes()
