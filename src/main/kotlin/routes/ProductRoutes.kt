@@ -38,24 +38,27 @@ fun Route.productRoutes() {
                 else call.respond(product)
             }
 
-            // картинка продукта
-            get("{id}/image") {
-                val id = call.parameters["id"]?.let { UUID.fromString(it) }
-                    ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                val imageBytes = transaction {
-                    Products
-                        .slice(Products.image)
-                        .select { Products.id eq id }
-                        .map { it[Products.image].bytes } // убрал nullable
-                        .singleOrNull()
-                }
+        }
+    }
+    route("/products") {
+        // картинка продукта
+        get("{id}/image") {
+            val id = call.parameters["id"]?.let { UUID.fromString(it) }
+                ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-                if (imageBytes == null) {
-                    call.respond(HttpStatusCode.NotFound)
-                } else {
-                    call.respondBytes(imageBytes, ContentType.Image.JPEG)
-                }
+            val imageBytes = transaction {
+                Products
+                    .slice(Products.image)
+                    .select { Products.id eq id }
+                    .map { it[Products.image].bytes } // убрал nullable
+                    .singleOrNull()
+            }
+
+            if (imageBytes == null) {
+                call.respond(HttpStatusCode.NotFound)
+            } else {
+                call.respondBytes(imageBytes, ContentType.Image.JPEG)
             }
         }
     }
